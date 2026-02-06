@@ -1,3 +1,5 @@
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per spec
+
 export async function extractTextFromPDF(file) {
   const pdfjs = await import('pdfjs-dist');
   const workerSrc = await import('pdfjs-dist/build/pdf.worker.mjs?url');
@@ -13,13 +15,22 @@ export async function extractTextFromPDF(file) {
     pages.push(content.items.map((item) => item.str).join(' '));
   }
 
-  return pages.join('\n');
+  const text = pages.join('\n');
+  if (!text.trim()) {
+    throw new Error('PDF appears to be empty or contains only images.');
+  }
+  return text;
 }
 
 export async function extractTextFromDocx(file) {
-  const data = await file.arrayBuffer();
-  const decoder = new TextDecoder('utf-8');
-  return decoder.decode(data).replace(/[^\x20-\x7E\n]/g, ' ');
+  const mammoth = await import('mammoth');
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  const text = result.value;
+  if (!text.trim()) {
+    throw new Error('DOCX appears to be empty or could not be read.');
+  }
+  return text;
 }
 
 export function detectDocumentType(text) {
@@ -35,8 +46,11 @@ export function validateResumeFile(file) {
   if (!lower.endsWith('.pdf') && !lower.endsWith('.docx')) {
     return 'File must be a PDF or DOCX.';
   }
-  if (file.size > 10 * 1024 * 1024) {
-    return 'File size exceeds 10MB limit.';
+  if (file.size > MAX_FILE_SIZE) {
+    return 'File size exceeds 5MB limit.';
+  }
+  if (file.size === 0) {
+    return 'File is empty.';
   }
   return '';
 }

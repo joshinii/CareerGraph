@@ -3,7 +3,7 @@ import SkillCard from './SkillCard';
 export default function SkillList({ skills, expandedSkillId, onToggle, onSelect }) {
   if (!skills.length) {
     return (
-      <section className="card">
+      <section className="card empty-state">
         <h2>Skills</h2>
         <p className="subtle">Upload a resume to see extracted skills.</p>
       </section>
