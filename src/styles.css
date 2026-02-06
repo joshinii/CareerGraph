@@ -1,0 +1,15 @@
+:root { font-family: Inter, system-ui, Arial, sans-serif; color: #111827; background: #f9fafb; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.app { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+.upload-box { border: 2px dashed #d1d5db; border-radius: 12px; padding: 24px; text-align: center; }
+button { border: 0; background: #111827; color: #fff; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+ul { list-style: none; margin: 0; padding: 0; }
+.skill-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
+.bar { height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+.fill { height: 100%; background: #2563eb; }
+.timeline-item { border-left: 2px solid #e5e7eb; margin-left: 8px; padding-left: 12px; margin-bottom: 8px; }
+.meta { color: #6b7280; font-size: 0.9rem; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
