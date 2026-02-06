@@ -1,6 +1,6 @@
 # CareerGraph Phase 0 (On-Device MVP)
 
-React + Vite SPA that processes resume/job uploads in-browser, extracts candidate skills with evidence, computes confidence scores, and persists a simple skill graph in localStorage.
+React + Vite SPA that processes resume/job uploads in-browser, extracts candidate skills with evidence, computes confidence scores, and persists a simple skill graph plus semantic job matching in localStorage.
 
 ## Setup
 
@@ -17,6 +17,7 @@ npm run dev
 - Extract skills with sentence-level evidence (transformers.js NER with regex fallback)
 - Build incremental skill graph and timeline across uploads
 - Compute confidence scores with evidence + context + depth + job relevance
+- Compare resume text to pasted job descriptions using on-device embeddings
 - Persist everything to localStorage (`careerGraph.phase0`)
 
 ## localStorage schema
@@ -57,6 +58,16 @@ npm run dev
       "metadata": { "company": "TechCorp", "jobTitle": "Frontend Engineer", "years": "2022-2024" },
       "uploadedAt": "2025-02-05T12:00:00.000Z"
     }
+  ],
+  "jobMatches": [
+    {
+      "jobId": "job_1",
+      "jobDescription": "...",
+      "matchScore": 78,
+      "matchType": "Strong",
+      "analyzedAt": "2025-02-06T12:00:00.000Z",
+      "uploadId": "upload_17388"
+    }
   ]
 }
 ```
@@ -69,6 +80,12 @@ npm run dev
 4. Convert detected tokens into candidate skills.
 5. Attach evidence payload with sentence + metadata + upload id.
 6. Deduplicate by `skill + sentence`.
+
+## Semantic job matching
+
+- Embeddings: `Xenova/all-MiniLM-L6-v2` via transformers.js (on-device).
+- First run downloads the model (~30MB); subsequent runs use the cached model.
+- Typical first-run latency: ~3-5 seconds; subsequent runs: <1 second.
 
 ## Confidence scoring formula
 

@@ -3,10 +3,15 @@ const KEY = 'careerGraph.phase0';
 export function loadState() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { skillGraph: [], uploads: [] };
-    return JSON.parse(raw);
+    if (!raw) return { skillGraph: [], uploads: [], jobMatches: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      skillGraph: parsed.skillGraph ?? [],
+      uploads: parsed.uploads ?? [],
+      jobMatches: parsed.jobMatches ?? []
+    };
   } catch {
-    return { skillGraph: [], uploads: [] };
+    return { skillGraph: [], uploads: [], jobMatches: [] };
   }
 }
 
@@ -39,5 +44,10 @@ export function upsertSkills(state, newSkills, upload) {
   });
 
   const uploads = [upload, ...state.uploads];
-  return { skillGraph: [...map.values()], uploads };
+  return { ...state, skillGraph: [...map.values()], uploads };
+}
+
+export function addJobMatch(state, match) {
+  const jobMatches = [match, ...(state.jobMatches ?? [])];
+  return { ...state, jobMatches };
 }
