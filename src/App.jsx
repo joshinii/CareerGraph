@@ -3,14 +3,21 @@ import UploadBox from './components/UploadBox';
 import SkillList from './components/SkillList';
 import EvidencePanel from './components/EvidencePanel';
 import Timeline from './components/Timeline';
-import { loadState, saveState, upsertSkills } from './utils/storage';
+import JobInput from './components/JobInput';
+import MatchResults from './components/MatchResults';
+import { loadState, saveState, upsertSkills, addJobMatch } from './utils/storage';
 import { extractTextFromPDF, extractTextFromDocx, detectType, extractMetadata } from './utils/textExtraction';
 import { calculateConfidence, extractSkills } from './utils/skills';
+import { compareResumeToJob, extractJobRequirements } from './lib/semanticMatching';
 
 export default function App() {
   const [state, setState] = useState(loadState);
   const [selectedSkill, setSelectedSkill] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [jobBusy, setJobBusy] = useState(false);
+  const [jobError, setJobError] = useState('');
+
+  const latestJobMatch = state.jobMatches?.[0] ?? null;
 
   const skillsWithConfidence = useMemo(() => {
     const jobSkills = new Set(
@@ -50,12 +57,59 @@ export default function App() {
     }
   }
 
+  async function handleJobPaste(jobDescription) {
+    const trimmed = jobDescription.trim();
+    if (!trimmed) {
+      setJobError('Paste a job description to analyze.');
+      return;
+    }
+
+    const resumeUpload = state.uploads.find((upload) => upload.type === 'resume');
+    if (!resumeUpload) {
+      setJobError('Upload a resume first so we can compare it to the job description.');
+      return;
+    }
+
+    setJobError('');
+    setJobBusy(true);
+    try {
+      const requirements = await extractJobRequirements(trimmed);
+      const match = await compareResumeToJob(resumeUpload.text, trimmed);
+      const analyzedAt = new Date().toISOString();
+      const jobMatch = {
+        jobId: `job_${Date.now()}`,
+        jobDescription: trimmed,
+        matchScore: match.overallScore,
+        matchType: match.matchType,
+        analyzedAt,
+        uploadId: resumeUpload.id,
+        requirements
+      };
+
+      const next = addJobMatch(state, jobMatch);
+      setState(next);
+      saveState(next);
+    } finally {
+      setJobBusy(false);
+    }
+  }
+
   return (
     <main className="app">
       <h1>CareerGraph · Phase 0 MVP</h1>
       <p className="meta">Browser-only resume/job parsing, skill extraction, confidence scoring, and local timeline.</p>
       <UploadBox onUpload={handleUpload} />
       {busy && <p>Processing upload...</p>}
+      <section className="card job-card">
+        <JobInput onJobPaste={handleJobPaste} disabled={jobBusy} />
+        {jobBusy && <p>Analyzing job match...</p>}
+        {jobError && <p className="warning">{jobError}</p>}
+      </section>
+      {latestJobMatch && (
+        <section className="card">
+          <MatchResults score={latestJobMatch.matchScore} matchType={latestJobMatch.matchType} />
+        </section>
+      )}
       <div className="grid">
         <SkillList skills={skillsWithConfidence} onSelect={setSelectedSkill} />
         <EvidencePanel skill={selectedSkill} />
