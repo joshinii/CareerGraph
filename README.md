@@ -1,6 +1,8 @@
 # CareerGraph Phase 0 (On-Device MVP)
 
-React + Vite SPA that processes resume/job uploads in-browser, extracts candidate skills with evidence, computes confidence scores, and persists a simple skill graph plus semantic job matching in localStorage.
+React + Vite SPA that processes resume uploads in-browser, extracts candidate skills with evidence, computes confidence scores, and persists a skill graph with job matching in localStorage.
+
+All processing runs locally in the browser — no data leaves your device.
 
 ## Setup
 
@@ -9,94 +11,62 @@ npm install
 npm run dev
 ```
 
-## Phase 0 capabilities
+## Features
 
-- Upload PDF/DOCX files
-- Auto-detect resume vs. job description
-- Extract metadata (`company`, `jobTitle`, `years`) from resume-like text
-- Extract skills with sentence-level evidence (transformers.js NER with regex fallback)
-- Build incremental skill graph and timeline across uploads
-- Compute confidence scores with evidence + context + depth + job relevance
-- Compare resume text to pasted job descriptions using on-device embeddings
-- Persist everything to localStorage (`careerGraph.phase0`)
+- Upload PDF or DOCX files (parsed via `pdfjs-dist` and `mammoth`)
+- Extract technical skills from resume text using taxonomy-based regex matching (~200 skills)
+- Track sentence-level evidence for each detected skill
+- Calculate 4-factor confidence scores per skill (evidence, context, recency, job relevance)
+- Paste a job description to compute skill match score (0-100%)
+- Identify matched and missing skills compared to job requirements
+- Persist skill graph, upload history, and job matches to localStorage
+- Merge skills across multiple resume uploads with timeline tracking
+
+## Architecture
+
+```
+src/
+  layers/
+    extraction/    – PDF/DOCX text extraction and regex-based skill detection
+    scoring/       – 4-factor confidence scoring and Dice-coefficient job matching
+    storage/       – localStorage read/write with versioning
+    utils/         – Skills taxonomy (~200 skills, 8 categories) and text helpers
+  components/      – React UI (SkillCard, EvidencePanel, MatchScoreDisplay, etc.)
+```
+
+## Skill extraction
+
+Skills are matched against a curated taxonomy of ~200 technical skills across 8 categories (programming languages, frameworks, cloud/DevOps, databases, data tools, monitoring, practices, tools). Matching uses case-insensitive regex with word boundary detection to avoid false positives.
+
+Each match captures the containing sentence as evidence.
+
+## Confidence scoring
+
+Each skill receives a 0-100% confidence score based on four weighted factors:
+
+| Factor | Max points | Description |
+|--------|-----------|-------------|
+| Evidence | 30 | Number of mentions (6 pts each, capped at 30) |
+| Context | 40 | Ratio of sentences with action verbs (built, implemented, etc.) |
+| Recency | 30 | Most recent year mentioned (30 if ≤1yr, 22 if ≤3yr, etc.) |
+| Job relevance | 20 | Whether skill appears in a job description |
+
+Total is computed dynamically from the breakdown and normalized to 0-100%.
+
+## Job matching
+
+Compares resume skills against skills extracted from a pasted job description using a Dice coefficient formula, clamped to 0-100%. Results show matched skills, missing skills, and an overall match type (STRONG ≥75%, MODERATE ≥50%, WEAK <50%).
 
 ## localStorage schema
 
-```json
-{
-  "skillGraph": [
-    {
-      "id": "react_1738800",
-      "name": "React",
-      "evidence": [
-        {
-          "skill": "React",
-          "source": "resume",
-          "evidence": {
-            "sentence": "Built web apps using React and Redux at TechCorp (2022-2024)",
-            "company": "TechCorp",
-            "jobTitle": "Frontend Engineer",
-            "years": "2022-2024"
-          },
-          "discoveredAt": "2025-02-05",
-          "uploadId": "upload_17388"
-        }
-      ],
-      "timeline": [
-        { "action": "discovered", "date": "2025-02-05", "uploadId": "upload_17388" }
-      ],
-      "lastUpdated": "2025-02-05",
-      "discoveredAt": "2025-02-05"
-    }
-  ],
-  "uploads": [
-    {
-      "id": "upload_17388",
-      "type": "resume",
-      "fileName": "resume.pdf",
-      "text": "...",
-      "metadata": { "company": "TechCorp", "jobTitle": "Frontend Engineer", "years": "2022-2024" },
-      "uploadedAt": "2025-02-05T12:00:00.000Z"
-    }
-  ],
-  "jobMatches": [
-    {
-      "jobId": "job_1",
-      "jobDescription": "...",
-      "matchScore": 78,
-      "matchType": "Strong",
-      "analyzedAt": "2025-02-06T12:00:00.000Z",
-      "uploadId": "upload_17388"
-    }
-  ]
-}
-```
+Three keys are used, each versioned:
 
-## Evidence extraction algorithm
+- `careergraph_skillgraph` — Array of skill objects with evidence, mentions, timeline
+- `careergraph_uploads` — Upload history (id, fileName, type, text, date)
+- `careergraph_jobmatches` — Job match results with scores and skill breakdowns
 
-1. Parse file text in browser (`pdfjs-dist` for PDF; basic DOCX text decode fallback).
-2. Identify source type (`resume`/`job`) using keyword heuristics.
-3. Run sentence splitting and NER (`@xenova/transformers` token-classification pipeline).
-4. Convert detected tokens into candidate skills.
-5. Attach evidence payload with sentence + metadata + upload id.
-6. Deduplicate by `skill + sentence`.
+## Browser support
 
-## Semantic job matching
-
-- Embeddings: `Xenova/all-MiniLM-L6-v2` via transformers.js (on-device).
-- First run downloads the model (~30MB); subsequent runs use the cached model.
-- Typical first-run latency: ~3-5 seconds; subsequent runs: <1 second.
-
-## Confidence scoring formula
-
-- Evidence presence (0-30)
-- Context quality via recency (0-20 currently implemented from date range)
-- Depth indicators (0-15)
-- Job relevance (0-15)
-- Clamped at 100.
-
-Displayed per skill as a score bar and percentage.
-
-## LM Studio note (Phase 1)
-
-Phase 0 does not include chat. For Phase 1, run LM Studio locally and configure a local endpoint integration from the client.
+- Chrome/Edge 90+
+- Firefox 88+
+- Safari 14+

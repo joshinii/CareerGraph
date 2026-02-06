@@ -21,7 +21,7 @@ export function buildJobMatch({ resumeSkills, jobDescription, uploadId }) {
 
   const overlap = matchedSkills.length;
   const total = jobSkills.length + resumeSkills.length || 1;
-  const matchScore = Math.round((2 * overlap * 100) / total);
+  const matchScore = Math.min(100, Math.round((2 * overlap * 100) / total));
 
   const skillMatches = jobSkills.map((skill) => ({
     skill,

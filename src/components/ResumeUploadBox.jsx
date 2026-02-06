@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { UploadCloud } from 'lucide-react';
 
-export default function ResumeUploadBox({ onFileSelect, busy, error }) {
+export default function ResumeUploadBox({ onFileSelect, busy, error, hasUploads }) {
+  const [dragOver, setDragOver] = useState(false);
+
   function handleFileChange(event) {
     const file = event.target.files?.[0];
     if (file) {
@@ -11,6 +14,7 @@ export default function ResumeUploadBox({ onFileSelect, busy, error }) {
 
   function handleDrop(event) {
     event.preventDefault();
+    setDragOver(false);
     const file = event.dataTransfer.files?.[0];
     if (file) onFileSelect(file);
   }
@@ -18,8 +22,12 @@ export default function ResumeUploadBox({ onFileSelect, busy, error }) {
   return (
     <section className="card">
       <div
-        className={`upload-box${busy ? ' is-busy' : ''}`}
-        onDragOver={(event) => event.preventDefault()}
+        className={`upload-box${busy ? ' is-busy' : ''}${dragOver ? ' drag-over' : ''}`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         role="button"
         tabIndex={0}
@@ -31,15 +39,27 @@ export default function ResumeUploadBox({ onFileSelect, busy, error }) {
           }
         }}
       >
-        <UploadCloud aria-hidden="true" />
+        <UploadCloud size={32} aria-hidden="true" />
         <div>
-          <p className="upload-title">Upload your resume (PDF or DOCX)</p>
-          <p className="upload-subtitle">Drag and drop or browse files. Parsing runs locally.</p>
+          <p className="upload-title">
+            {hasUploads ? 'Upload another resume' : 'Upload your resume'}
+          </p>
+          <p className="upload-subtitle">
+            Drag and drop or browse files. Supported: PDF, DOCX (max 5MB).
+          </p>
         </div>
-        <input type="file" accept=".pdf,.docx" onChange={handleFileChange} disabled={busy} />
+        <label className="upload-btn">
+          Choose File
+          <input type="file" accept=".pdf,.docx" onChange={handleFileChange} disabled={busy} />
+        </label>
       </div>
-      {busy && <p className="status-line">Extracting text and skills…</p>}
-      {error && <p className="status-line error">{error}</p>}
+      {busy && (
+        <div className="status-line loading" role="status">
+          <span className="spinner" aria-hidden="true" />
+          Extracting text and skills…
+        </div>
+      )}
+      {error && <p className="status-line error" role="alert">{error}</p>}
     </section>
   );
 }

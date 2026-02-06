@@ -72,17 +72,21 @@ export function calculateConfidence(skill, jobSkills) {
   const recencyScore = scoreRecency(skill.evidence);
   const jobScore = scoreJobRelevance(jobSkills?.has(skill.name.toLowerCase()));
 
-  const totalRaw = evidenceScore.score + contextScore.score + recencyScore.score + jobScore.score;
-  const totalScore = Math.round((totalRaw / 120) * 100);
+  const breakdown = [
+    { label: 'Evidence', ...evidenceScore },
+    { label: 'Context', ...contextScore },
+    { label: 'Recency', ...recencyScore },
+    { label: 'Job relevance', ...jobScore }
+  ];
+
+  const totalRaw = breakdown.reduce((sum, item) => sum + item.score, 0);
+  const maxPossible = breakdown.reduce((sum, item) => sum + item.max, 0);
+  const totalScore = Math.min(100, Math.round((totalRaw / maxPossible) * 100));
 
   return {
     totalScore,
     totalRaw,
-    breakdown: [
-      { label: 'Evidence', ...evidenceScore },
-      { label: 'Context', ...contextScore },
-      { label: 'Recency', ...recencyScore },
-      { label: 'Job relevance', ...jobScore }
-    ]
+    maxPossible,
+    breakdown
   };
 }

@@ -12,7 +12,11 @@ const emptyState = {
 function safeParse(key) {
   const raw = localStorage.getItem(key);
   if (!raw) return { version: STORAGE_VERSION, data: null };
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function safeLoadKey(key) {
@@ -33,7 +37,11 @@ export function loadState() {
 }
 
 function saveKey(key, data) {
-  localStorage.setItem(key, JSON.stringify({ version: STORAGE_VERSION, data }));
+  try {
+    localStorage.setItem(key, JSON.stringify({ version: STORAGE_VERSION, data }));
+  } catch (error) {
+    console.error(`Failed to save ${key} to localStorage:`, error);
+  }
 }
 
 export function saveState(state) {

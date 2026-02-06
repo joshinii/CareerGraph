@@ -41,10 +41,12 @@ export default function App() {
 
   const skillsWithConfidence = useMemo(
     () =>
-      data.skillGraph.map((skill) => ({
-        ...skill,
-        confidence: calculateConfidence(skill, jobSkillSet)
-      })),
+      data.skillGraph
+        .map((skill) => ({
+          ...skill,
+          confidence: calculateConfidence(skill, jobSkillSet)
+        }))
+        .sort((a, b) => b.confidence.totalScore - a.confidence.totalScore),
     [data.skillGraph, jobSkillSet]
   );
 
@@ -61,7 +63,8 @@ export default function App() {
 
     try {
       const uploadId = `upload_${Date.now()}`;
-      const text = file.name.toLowerCase().endsWith('.pdf')
+      const isPdf = file.name.toLowerCase().endsWith('.pdf');
+      const text = isPdf
         ? await extractTextFromPDF(file)
         : await extractTextFromDocx(file);
       const source = detectDocumentType(text);
@@ -79,16 +82,24 @@ export default function App() {
         uploadName: file.name
       });
 
+      if (skillFindings.length === 0) {
+        setUploadStatus({
+          busy: false,
+          error: 'No technical skills detected. Try a different resume.'
+        });
+        return;
+      }
+
       const next = mergeUpload(data, { upload, skillFindings });
       setData(next);
       saveState(next);
       setSelectedSkillId(null);
+      setUploadStatus({ busy: false, error: '' });
     } catch (error) {
-      setUploadStatus({ busy: false, error: 'Unable to parse the file. Try a different resume.' });
-      return;
+      console.error('Resume upload failed:', error);
+      const message = error?.message || 'Unable to parse the file. Try a different resume.';
+      setUploadStatus({ busy: false, error: message });
     }
-
-    setUploadStatus({ busy: false, error: '' });
   }
 
   async function handleJobAnalyze(description) {
@@ -123,6 +134,7 @@ export default function App() {
       saveState(next);
       setJobStatus({ busy: false, error: '' });
     } catch (error) {
+      console.error('Job analysis failed:', error);
       setJobStatus({ busy: false, error: 'Unable to analyze the job description.' });
     }
   }
@@ -154,7 +166,16 @@ export default function App() {
             onFileSelect={handleUpload}
             busy={uploadStatus.busy}
             error={uploadStatus.error}
+            hasUploads={data.uploads.length > 0}
           />
+          {data.uploads.length > 0 && (
+            <JobInputBox
+              onAnalyze={handleJobAnalyze}
+              disabled={jobStatus.busy}
+              error={jobStatus.error}
+            />
+          )}
+          {latestJobMatch && <MatchScoreDisplay match={latestJobMatch} />}
           <SkillList
             skills={skillsWithConfidence}
             expandedSkillId={expandedSkillId}
@@ -164,8 +185,6 @@ export default function App() {
         </div>
         <div className="right-column">
           <EvidencePanel skill={selectedSkill} />
-          <JobInputBox onAnalyze={handleJobAnalyze} disabled={jobStatus.busy} error={jobStatus.error} />
-          <MatchScoreDisplay match={latestJobMatch} />
         </div>
       </div>
       <Footer />
