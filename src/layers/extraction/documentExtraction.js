@@ -22,24 +22,21 @@ export async function extractTextFromDocx(file) {
   return decoder.decode(data).replace(/[^\x20-\x7E\n]/g, ' ');
 }
 
-export function detectType(text) {
+export function detectDocumentType(text) {
   const lower = text.toLowerCase();
-  if (/(experience|education|skills|projects)/.test(lower)) return 'resume';
+  if (/(experience|education|skills|projects|summary)/.test(lower)) return 'resume';
   if (/(requirements|responsibilities|qualifications|job description)/.test(lower)) return 'job';
   return 'unknown';
 }
 
-export function extractMetadata(text, type) {
-  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
-  if (type !== 'resume') return { company: null, jobTitle: null, years: null };
-
-  const yearMatch = text.match(/(20\d{2})\s*[-–]\s*(20\d{2}|present)/i);
-  const companyLine = lines.find((l) => /(inc|llc|corp|technologies|systems|labs)/i.test(l)) || null;
-  const titleLine = lines.find((l) => /(engineer|developer|manager|designer|analyst)/i.test(l)) || null;
-
-  return {
-    company: companyLine,
-    jobTitle: titleLine,
-    years: yearMatch ? `${yearMatch[1]}-${yearMatch[2]}` : null
-  };
+export function validateResumeFile(file) {
+  if (!file) return 'Select a PDF or DOCX file.';
+  const lower = file.name.toLowerCase();
+  if (!lower.endsWith('.pdf') && !lower.endsWith('.docx')) {
+    return 'File must be a PDF or DOCX.';
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return 'File size exceeds 10MB limit.';
+  }
+  return '';
 }

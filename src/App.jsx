@@ -1,120 +1,174 @@
 import { useMemo, useState } from 'react';
-import UploadBox from './components/UploadBox';
+import Header from './components/Header';
+import Footer from './components/Footer';
+import ResumeUploadBox from './components/ResumeUploadBox';
 import SkillList from './components/SkillList';
 import EvidencePanel from './components/EvidencePanel';
-import Timeline from './components/Timeline';
-import JobInput from './components/JobInput';
-import MatchResults from './components/MatchResults';
-import { loadState, saveState, upsertSkills, addJobMatch } from './utils/storage';
-import { extractTextFromPDF, extractTextFromDocx, detectType, extractMetadata } from './utils/textExtraction';
-import { calculateConfidence, extractSkills } from './utils/skills';
-import { compareResumeToJob, extractJobRequirements } from './lib/semanticMatching';
+import JobInputBox from './components/JobInputBox';
+import MatchScoreDisplay from './components/MatchScoreDisplay';
+import {
+  loadState,
+  saveState,
+  mergeUpload,
+  addJobMatch,
+  clearStorage
+} from './layers/storage/storageService';
+import {
+  extractTextFromPDF,
+  extractTextFromDocx,
+  detectDocumentType,
+  validateResumeFile
+} from './layers/extraction/documentExtraction';
+import { extractSkillsFromText } from './layers/extraction/skillExtraction';
+import { calculateConfidence } from './layers/scoring/confidenceScoring';
+import { buildJobMatch } from './layers/scoring/jobMatching';
+
+const initialState = loadState();
 
 export default function App() {
-  const [state, setState] = useState(loadState);
-  const [selectedSkill, setSelectedSkill] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [jobBusy, setJobBusy] = useState(false);
-  const [jobError, setJobError] = useState('');
+  const [data, setData] = useState(initialState.data);
+  const [storageCorrupted, setStorageCorrupted] = useState(initialState.corrupted);
+  const [uploadStatus, setUploadStatus] = useState({ busy: false, error: '' });
+  const [jobStatus, setJobStatus] = useState({ busy: false, error: '' });
+  const [expandedSkillId, setExpandedSkillId] = useState(null);
+  const [selectedSkillId, setSelectedSkillId] = useState(null);
 
-  const latestJobMatch = state.jobMatches?.[0] ?? null;
+  const latestJobMatch = data.jobMatches[0] ?? null;
+  const jobSkillSet = useMemo(() => {
+    if (!latestJobMatch?.jobSkills) return new Set();
+    return new Set(latestJobMatch.jobSkills.map((skill) => skill.toLowerCase()));
+  }, [latestJobMatch]);
 
-  const skillsWithConfidence = useMemo(() => {
-    const jobSkills = new Set(
-      state.skillGraph
-        .filter((s) => s.evidence.some((e) => e.source === 'job'))
-        .map((s) => s.name.toLowerCase())
-    );
+  const skillsWithConfidence = useMemo(
+    () =>
+      data.skillGraph.map((skill) => ({
+        ...skill,
+        confidence: calculateConfidence(skill, jobSkillSet)
+      })),
+    [data.skillGraph, jobSkillSet]
+  );
 
-    return state.skillGraph.map((skill) => {
-      const years = skill.evidence.find((e) => e.evidence.years)?.evidence.years;
-      const confidence = calculateConfidence(skill.evidence, years, jobSkills.has(skill.name.toLowerCase()));
-      return { ...skill, confidence };
-    });
-  }, [state.skillGraph]);
+  const selectedSkill = skillsWithConfidence.find((skill) => skill.id === selectedSkillId) ?? null;
 
   async function handleUpload(file) {
-    setBusy(true);
+    const validationError = validateResumeFile(file);
+    if (validationError) {
+      setUploadStatus({ busy: false, error: validationError });
+      return;
+    }
+
+    setUploadStatus({ busy: true, error: '' });
+
     try {
       const uploadId = `upload_${Date.now()}`;
-      const text = file.name.toLowerCase().endsWith('.pdf') ? await extractTextFromPDF(file) : await extractTextFromDocx(file);
-      const source = detectType(text);
-      const metadata = extractMetadata(text, source);
-      const skillEvidence = await extractSkills(text, metadata, source, uploadId);
-
-      const next = upsertSkills(state, skillEvidence, {
+      const text = file.name.toLowerCase().endsWith('.pdf')
+        ? await extractTextFromPDF(file)
+        : await extractTextFromDocx(file);
+      const source = detectDocumentType(text);
+      const upload = {
         id: uploadId,
-        type: source,
         fileName: file.name,
+        type: source === 'unknown' ? 'resume' : source,
         text,
-        metadata,
         uploadedAt: new Date().toISOString()
-      });
-      setState(next);
-      saveState(next);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleJobPaste(jobDescription) {
-    const trimmed = jobDescription.trim();
-    if (!trimmed) {
-      setJobError('Paste a job description to analyze.');
-      return;
-    }
-
-    const resumeUpload = state.uploads.find((upload) => upload.type === 'resume');
-    if (!resumeUpload) {
-      setJobError('Upload a resume first so we can compare it to the job description.');
-      return;
-    }
-
-    setJobError('');
-    setJobBusy(true);
-    try {
-      const requirements = await extractJobRequirements(trimmed);
-      const match = await compareResumeToJob(resumeUpload.text, trimmed);
-      const analyzedAt = new Date().toISOString();
-      const jobMatch = {
-        jobId: `job_${Date.now()}`,
-        jobDescription: trimmed,
-        matchScore: match.overallScore,
-        matchType: match.matchType,
-        analyzedAt,
-        uploadId: resumeUpload.id,
-        requirements
       };
 
-      const next = addJobMatch(state, jobMatch);
-      setState(next);
+      const skillFindings = extractSkillsFromText(text, {
+        source: 'resume',
+        uploadId,
+        uploadName: file.name
+      });
+
+      const next = mergeUpload(data, { upload, skillFindings });
+      setData(next);
       saveState(next);
-    } finally {
-      setJobBusy(false);
+      setSelectedSkillId(null);
+    } catch (error) {
+      setUploadStatus({ busy: false, error: 'Unable to parse the file. Try a different resume.' });
+      return;
+    }
+
+    setUploadStatus({ busy: false, error: '' });
+  }
+
+  async function handleJobAnalyze(description) {
+    if (!description.trim()) {
+      setJobStatus({ busy: false, error: 'Paste a job description to analyze.' });
+      return;
+    }
+
+    if (!data.uploads.length) {
+      setJobStatus({ busy: false, error: 'Upload a resume before running job match.' });
+      return;
+    }
+
+    setJobStatus({ busy: true, error: '' });
+    try {
+      const match = buildJobMatch({
+        resumeSkills: data.skillGraph,
+        jobDescription: description,
+        uploadId: data.uploads[0].id
+      });
+
+      const jobMatch = {
+        jobId: `job_${Date.now()}`,
+        jobDescription: description,
+        analyzedAt: new Date().toISOString(),
+        uploadId: data.uploads[0].id,
+        ...match
+      };
+
+      const next = addJobMatch(data, jobMatch);
+      setData(next);
+      saveState(next);
+      setJobStatus({ busy: false, error: '' });
+    } catch (error) {
+      setJobStatus({ busy: false, error: 'Unable to analyze the job description.' });
     }
   }
 
   return (
-    <main className="app">
-      <h1>CareerGraph · Phase 0 MVP</h1>
-      <p className="meta">Browser-only resume/job parsing, skill extraction, confidence scoring, and local timeline.</p>
-      <UploadBox onUpload={handleUpload} />
-      {busy && <p>Processing upload...</p>}
-      <section className="card job-card">
-        <JobInput onJobPaste={handleJobPaste} disabled={jobBusy} />
-        {jobBusy && <p>Analyzing job match...</p>}
-        {jobError && <p className="warning">{jobError}</p>}
-      </section>
-      {latestJobMatch && (
-        <section className="card">
-          <MatchResults score={latestJobMatch.matchScore} matchType={latestJobMatch.matchType} />
+    <div className="app">
+      <Header />
+      {storageCorrupted && (
+        <section className="card warning-card" role="alert">
+          <p>
+            We detected corrupted storage data. You can reset local storage to recover safely.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              clearStorage();
+              const reset = loadState();
+              setData(reset.data);
+              setStorageCorrupted(false);
+            }}
+          >
+            Reset storage
+          </button>
         </section>
       )}
-      <div className="grid">
-        <SkillList skills={skillsWithConfidence} onSelect={setSelectedSkill} />
-        <EvidencePanel skill={selectedSkill} />
+      <div className="main-grid">
+        <div className="left-column">
+          <ResumeUploadBox
+            onFileSelect={handleUpload}
+            busy={uploadStatus.busy}
+            error={uploadStatus.error}
+          />
+          <SkillList
+            skills={skillsWithConfidence}
+            expandedSkillId={expandedSkillId}
+            onToggle={(id) => setExpandedSkillId((prev) => (prev === id ? null : id))}
+            onSelect={setSelectedSkillId}
+          />
+        </div>
+        <div className="right-column">
+          <EvidencePanel skill={selectedSkill} />
+          <JobInputBox onAnalyze={handleJobAnalyze} disabled={jobStatus.busy} error={jobStatus.error} />
+          <MatchScoreDisplay match={latestJobMatch} />
+        </div>
       </div>
-      <Timeline skill={selectedSkill} />
-    </main>
+      <Footer />
+    </div>
   );
 }

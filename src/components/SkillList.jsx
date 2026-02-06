@@ -1,19 +1,32 @@
-export default function SkillList({ skills, onSelect }) {
+import SkillCard from './SkillCard';
+
+export default function SkillList({ skills, expandedSkillId, onToggle, onSelect }) {
+  if (!skills.length) {
+    return (
+      <section className="card">
+        <h2>Skills</h2>
+        <p className="subtle">Upload a resume to see extracted skills.</p>
+      </section>
+    );
+  }
+
   return (
-    <div className="card">
-      <h3>Skill List</h3>
-      <ul>
+    <section className="card">
+      <div className="skills-header">
+        <h2>Skills</h2>
+        <span className="meta-line">{skills.length} skills found</span>
+      </div>
+      <div className="skills-grid">
         {skills.map((skill) => (
-          <li key={skill.id} className="skill-item" onClick={() => onSelect(skill)}>
-            <strong>{skill.name}</strong>
-            <div className="meta">Evidence: {skill.evidence.length} · Updated: {skill.lastUpdated}</div>
-            <div className="bar">
-              <div className="fill" style={{ width: `${skill.confidence}%` }} />
-            </div>
-            <small>{skill.confidence}%</small>
-          </li>
+          <SkillCard
+            key={skill.id}
+            skill={skill}
+            expanded={expandedSkillId === skill.id}
+            onToggle={onToggle}
+            onSelect={onSelect}
+          />
         ))}
-      </ul>
-    </div>
+      </div>
+    </section>
   );
 }
