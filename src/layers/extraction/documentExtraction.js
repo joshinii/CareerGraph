@@ -12,7 +12,25 @@ export async function extractTextFromPDF(file) {
   for (let i = 1; i <= pdf.numPages; i += 1) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    pages.push(content.items.map((item) => item.str).join(' '));
+
+    // Group text items into lines using vertical position (transform[5] = y)
+    const lines = [];
+    let currentLine = [];
+    let lastY = null;
+
+    for (const item of content.items) {
+      if (!item.str.trim()) continue;
+      const y = Math.round(item.transform[5]);
+      if (lastY !== null && Math.abs(y - lastY) > 2) {
+        lines.push(currentLine.join(' '));
+        currentLine = [];
+      }
+      currentLine.push(item.str);
+      lastY = y;
+    }
+    if (currentLine.length) lines.push(currentLine.join(' '));
+
+    pages.push(lines.join('\n'));
   }
 
   const text = pages.join('\n');
