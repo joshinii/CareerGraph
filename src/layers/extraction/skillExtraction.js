@@ -1,5 +1,5 @@
 import { getAllSkills, getSkillCategory } from '../utils/skillsTaxonomy';
-import { buildSkillRegex, splitSentences } from '../utils/textUtils';
+import { buildSkillRegex, splitSentences, extractSnippetAroundMatch } from '../utils/textUtils';
 
 const SKILL_PATTERNS = getAllSkills().map((skill) => ({
   skill,
@@ -19,7 +19,7 @@ export function extractSkillsFromText(text, { source, uploadId, uploadName }) {
           category,
           sentence,
           sentenceIndex: index,
-          snippet: sentence.slice(0, 200),
+          snippet: extractSnippetAroundMatch(sentence, skill),
           source,
           uploadId,
           uploadName
